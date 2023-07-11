@@ -1,0 +1,213 @@
+import pygame
+import numpy as np
+from os import path
+from sys import exit
+pygame.init()
+
+img_dir = path.join(path.dirname(__file__), 'assets','img')
+snd_dir = path.join(path.dirname(__file__), 'assets','snd')
+
+
+width, height = 800, 545
+screen = pygame.display.set_mode((width, height))
+pygame.display.set_caption("러시안 룰렛")
+clock = pygame.time.Clock()
+
+gun_chamber = pygame.image.load(path.join(img_dir, 'gun_chamber.png')).convert()
+
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+YELLOW = (255, 255, 0)
+
+
+background_img = pygame.image.load(path.join(img_dir, 'background.png'))
+background2_img = pygame.image.load(path.join(img_dir, 'background2.png'))
+bullet_img = pygame.image.load(path.join(img_dir, 'bullet.png'))
+gun_chamber_img = pygame.image.load(path.join(img_dir, 'gun_chamber.png')).convert()
+
+
+font_name = pygame.font.match_font('arial')
+def draw_text(surf, text, size, x, y):
+    font = pygame.font.Font(font_name, size)
+    text_surface = font.render(text, True, YELLOW)
+    text_rect = text_surface.get_rect()
+    text_rect.midtop = (x, y)
+    surf.blit(text_surface, text_rect)
+
+rotation_angle = 24
+rotation_active = False 
+
+center = (width / 2., height / 2.)
+
+def getRegularPolygon(N, radius=1):
+    v = np.zeros((N,2))
+    for i in range(N):
+        deg = i * 360. / N
+        rad = deg * np.pi / 180.
+        x = radius * np.cos(rad)
+        y = radius * np.sin(rad)
+        v[i] = [x, y]
+    return v
+
+def Rmat(degree):
+    radian = np.deg2rad(degree)
+    c = np.cos(radian)
+    s = np.sin(radian)
+    R = np.array([[c, -s],
+                  [s, c]], dtype='float')
+    return R 
+
+def Tmat(tx, ty):
+    T = np.array([[1, 0, tx],
+                  [0, 1, ty]], dtype='float')
+    return T
+    
+def draw(M, points, color=(0,0,0), fill_color=None, p0=None):
+    R = M[0:2, 0:2]
+    t = M[0:2, 2]
+    
+    points_transformed = (R @ points.T).T + t 
+    
+    if fill_color is not None:
+        pygame.draw.polygon(screen, fill_color, points_transformed)    
+    pygame.draw.polygon(screen, color, points_transformed, 5)
+    if p0 is not None:
+        pygame.draw.line(screen, (0, 0, 0), p0, points_transformed[0])
+
+
+def show_go_screen():
+    screen.blit(background_img, background_rect)
+    draw_text(screen, "Today's Luck", 64, width / 2, height / 4)
+    draw_text(screen, "Press any key to begin", 22,
+              width / 2, height / 2)
+    pygame.display.flip()
+    waiting = True
+    while waiting:
+        clock.tick(60)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+            if event.type == pygame.KEYUP:
+                waiting = False
+
+background = pygame.image.load(path.join(img_dir, "background.png")).convert()
+background_rect = background.get_rect()
+background2 = pygame.image.load(path.join(img_dir, "background2.png")).convert()
+background2_rect = background2.get_rect()
+
+
+
+chamber_size = 6  
+bullet_count = 0 
+rotation_speed = -4  
+
+bullet_list=[]
+
+# 총알 쏠지 묻는 화면
+def show_shoot_screen():
+    global bullet_count
+    screen.fill(BLACK)
+    draw_text(screen, "Shoot or Spin Again?", 64, width / 2, height / 4)
+    draw_text(screen, "Press S to shoot, or A to change again", 22, width / 2, height / 2)
+    pygame.display.flip()
+    waiting = True
+    while waiting:
+        clock.tick(60)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+            if event.type == pygame.KEYUP:
+                if event.key == pygame.K_s:
+                    waiting = False
+                elif event.key == pygame.K_a:
+                    bullet_count = 0  
+                    waiting = False
+
+
+def show_end_screen():
+    screen.blit(background2_img, background2_rect)
+    if len(bullet_list) > 0 and np.array_equal(bullet_list[1], np.array([380, 210])):
+        draw_text(screen, "YOU LOSE", 64, width / 2, height / 4)
+    else:
+        draw_text(screen, "YOU WIN!", 64, width / 2, height / 4)
+    pygame.display.flip()  # 결과 표시
+    waiting = True
+    while waiting:
+        clock.tick(30)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+
+running = False
+spinning = False
+shooting = False
+
+game_over = True
+running = True
+while running:
+    if game_over:
+        show_go_screen()
+        game_over = False
+
+    for event in pygame.event.get():
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_b:
+                if bullet_count < chamber_size:
+                    bullet_count += 1
+            elif event.key == pygame.K_r:
+                if bullet_count > 0:
+                    spinning = True
+        if event.type == pygame.KEYUP:
+            if event.key == pygame.K_a:
+                spinning = False
+            if event.key == pygame.K_s:
+                if bullet_count > 0:
+                    shooting = True
+                    show_end_screen()
+
+    gcenter = np.array([380, 248])
+    screen.fill(BLACK)
+    if spinning:
+        # 탄창 회전 
+        rotation_angle += rotation_speed
+        if rotation_angle <= -360:
+            rotation_angle += 360
+            spinning = False
+            show_shoot_screen()
+        rotated_image = pygame.transform.rotate(gun_chamber, rotation_angle)
+        rect = rotated_image.get_rect(center=gcenter)
+        screen.blit(rotated_image, rect)
+    elif shooting:
+        shooting = False
+        if len(bullet_list) > 0 and np.array_equal(bullet_list[1], np.array([380, 210])):
+            draw_text(screen, "YOU LOSE", 64, width / 2, height / 4)
+        else:
+            draw_text(screen, "YOU WIN!", 64, width / 2, height / 4)
+            pygame.display.flip()  # 결과 표시
+    else:
+        # 탄창 그리기
+        chamber_x = width // 2 - gun_chamber.get_width() // 2
+        chamber_y = height // 2 - gun_chamber.get_height() // 2
+        screen.blit(gun_chamber, (chamber_x, chamber_y))
+
+        # 총알 그리기
+        gcenter = np.array([380, 248])
+        bullet_start = np.array([chamber_x + gun_chamber.get_width() // 2,
+                                 chamber_y + gun_chamber.get_height() // 4 * 3])
+        bullet_list = []
+        for i in range(bullet_count):
+            rotation_angle = (i * 60) - 30
+            rad = np.deg2rad(rotation_angle)
+            x = gcenter[0] + 38 * np.cos(rad)
+            y = gcenter[1] + 38 * np.sin(rad)
+            bullet_center = np.array([x, y])
+            bullet_list.append(bullet_center)
+            screen.blit(bullet_img, bullet_center)
+
+
+    pygame.display.flip()
+
+pygame.quit()
